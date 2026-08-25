@@ -30,7 +30,7 @@ export function apply(ctx: Context, config: Config) {
       },
       includeDeps: {
         type: 'boolean',
-        description: '是否在打包前为本地路径安装依赖以完成构建（默认 true；注意产物 tarball 本身不携带 node_modules）',
+        description: '是否将插件的 npm 依赖一并打入离线包（默认 true；peerDependencies 由 DSH 宿主提供，不打入）',
       },
     },
     output: {

@@ -145,13 +145,16 @@ dsh --profile web --dump-config
 
 本插件自身自 0.1.1 起构建为**零依赖单文件产物**（esbuild 在构建时将 `@deepseek-ai/schemastery`、`@deepseek-ai/dsh-tools` 等运行时依赖内联进 `lib/index.js`），因此本插件的 `.tgz` 在离线环境安装时无需联网拉取任何依赖。
 
+自 0.2.0 起，打包**其他插件**时也会把其生产依赖闭包一并打入 tarball：打包过程在暂存目录中安装插件的完整依赖树，通过 `bundleDependencies` 让 `npm pack` 携带 `node_modules`，离线机器安装时 pnpm 直接使用包内依赖、无需访问 registry（已验证 pnpm `--offline` 模式可安装）。打入的依赖清单记录在 `*.meta.json` 的 `bundledDependencies` 字段。`peerDependencies` 不打入，由 DSH 宿主在 profile 中满足。
+
 ## 注意事项
 
 - 打包过程需要联网（npm 下载 / GitHub 克隆）
 - 从 GitHub 打包时，需要系统已安装 `git`
 - 离线安装要求目标机器已有 DSH 基础框架（`@deepseek-ai/dsh`）
 - 打包本地路径时，会自动尝试安装依赖和构建，但不保证所有项目都能成功
-- **打包其他插件时，产物不携带该插件的 npm 依赖**：`npm pack` 始终排除 `node_modules`，离线机器上安装此类 tgz 时 pnpm 仍需联网拉取其声明的依赖，会因无法访问 registry 而失败。目标插件若有运行时依赖，需其作者先构建为零依赖产物（如本插件自 0.1.1 起采用的 esbuild 内联方式）
+- **含原生二进制依赖的插件需在与目标离线机相同的平台（OS/arch）上打包**：离线包携带的是打包机上安装到的依赖版本，平台相关的 `optionalDependencies`（如原生模块）跨平台不可用
+- **插件的 `peerDependencies` 不会打入离线包**：它们由 DSH 宿主在 profile 中提供（如 cordis），目标机器需已具备对应的 DSH 基础框架
 - **Windows 下 `.tgz` 的存放路径不能包含空格**：`dsh plugin --profile web add` 在 Windows 上以 shell 模式把参数转发给 pnpm，且不会为参数补引号，路径会在空格处被截断。例如在 `D:\DSH Desktop\offline-packages` 下执行 `dsh plugin --profile web add ./xxx.tgz`，pnpm 实际会去 `<profile 目录>\Desktop\offline-packages\xxx.tgz` 找文件，报 `ENOENT: no such file or directory`。此问题与 tar 包格式无关，手动加引号也无效（引号在传参给 dsh 时已被 shell 消费）。解决办法是先把 `.tgz` 移到不含空格的目录再安装：
 
   ```powershell
