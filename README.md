@@ -10,7 +10,7 @@ DeepSeek Harness 离线打包插件 — 在联网环境下将 DSH 插件打包�
 - **GitHub 仓库**（如 `github:user/repo`）— 克隆后构建再打包
 - **本地路径**（如 `./my-plugin`）— 构建后打包
 
-生成的 `.tgz` 文件可转移到离线机器，通过 DSH 自带的 `dsh plugin add` 命令安装。
+生成的 `.tgz` 文件可转移到离线机器，通过 DSH 自带的 `dsh plugin --profile web add` 命令安装。
 
 ## 安装本插件
 
@@ -62,7 +62,7 @@ AI 会自动调用 `offline-pack` 工具，输出类似：
 离线包已生成: /path/to/offline-packages/deepseek-ai-dsh-base-0.1.1-rc.2.tgz
 
 在离线环境的 DSH 中执行以下命令安装:
-  dsh plugin add "deepseek-ai-dsh-base-0.1.1-rc.2.tgz"
+  dsh plugin --profile web add "deepseek-ai-dsh-base-0.1.1-rc.2.tgz"
 ```
 
 ### 方式二：直接调用工具
@@ -113,6 +113,8 @@ dsh plugin --profile web add ./deepseek-ai-dsh-base-0.1.1-rc.2.tgz
 
 DSH 会解析 tarball 中的 `dsh.bundle` 声明，自动注册插件层并追加到 profile 的 `bundles` 列表。
 
+> **Windows 注意**：`.tgz` 文件所在的完整路径（含各级目录）不能包含空格，否则 `dsh plugin --profile web add` 会报 `ENOENT`，详见下方[注意事项](#注意事项)。
+
 ### 验证安装
 
 ```bash
@@ -147,3 +149,10 @@ dsh --profile web --dump-config
 - 从 GitHub 打包时，需要系统已安装 `git`
 - 离线安装要求目标机器已有 DSH 基础框架（`@deepseek-ai/dsh`）
 - 打包本地路径时，会自动尝试安装依赖和构建，但不保证所有项目都能成功
+- **Windows 下 `.tgz` 的存放路径不能包含空格**：`dsh plugin --profile web add` 在 Windows 上以 shell 模式把参数转发给 pnpm，且不会为参数补引号，路径会在空格处被截断。例如在 `D:\DSH Desktop\offline-packages` 下执行 `dsh plugin --profile web add ./xxx.tgz`，pnpm 实际会去 `<profile 目录>\Desktop\offline-packages\xxx.tgz` 找文件，报 `ENOENT: no such file or directory`。此问题与 tar 包格式无关，手动加引号也无效（引号在传参给 dsh 时已被 shell 消费）。解决办法是先把 `.tgz` 移到不含空格的目录再安装：
+
+  ```powershell
+  copy "D:\DSH Desktop\offline-packages\xxx.tgz" C:\temp\
+  cd C:\temp
+  dsh plugin --profile web add .\xxx.tgz
+  ```
