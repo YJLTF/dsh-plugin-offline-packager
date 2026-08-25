@@ -17,7 +17,7 @@ export const Config: Schema<Config> = Schema.object({
 export function apply(ctx: Context, config: Config) {
   ctx.tools.register(defineTool({
     name: 'offline-pack',
-    description: '将指定的 DeepSeek Harness 插件打包为离线安装包（.tgz），可在无网络的 DSH 环境中通过 `dsh plugin add <file>.tgz` 安装',
+    description: '将指定的 DeepSeek Harness 插件打包为离线安装包（.tgz），可在无网络的 DSH 环境中通过 `dsh plugin --profile web add <file>.tgz` 安装',
     parameters: {
       source: {
         type: 'string',
@@ -44,7 +44,7 @@ export function apply(ctx: Context, config: Config) {
         args.output ? String(args.output) : undefined,
         args.includeDeps !== false,
       )
-      return `离线包已生成: ${result}\n\n在离线环境的 DSH 中执行以下命令安装:\n  dsh plugin add "${result}"`
+      return `离线包已生成: ${result}\n\n在离线环境的 DSH 中执行以下命令安装:\n  dsh plugin --profile web add "${result}"`
     },
   }))
 }
