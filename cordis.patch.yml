@@ -1,0 +1,3 @@
+- insert:
+  - id: offline-packager
+    name: dsh-plugin-offline-packager
