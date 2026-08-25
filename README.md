@@ -140,12 +140,14 @@ dsh --profile web --dump-config
 
 | 文件 | 说明 |
 |------|------|
-| `*.tgz` | 标准 npm tarball，可直接用于离线安装 |
-| `*.meta.json` | 元数据文件（包名、打包时间、来源、DSH 版本等） |
+| `*.tgz` | 自包含的 npm tarball，可直接用于离线安装 |
+| `*.meta.json` | 元数据文件（包名、打包时间、来源、DSH 版本、`bundledDependencies` 依赖清单等） |
 
-本插件自身自 0.1.1 起构建为**零依赖单文件产物**（esbuild 在构建时将 `@deepseek-ai/schemastery`、`@deepseek-ai/dsh-tools` 等运行时依赖内联进 `lib/index.js`），因此本插件的 `.tgz` 在离线环境安装时无需联网拉取任何依赖。
+离线包是**自包含**的，安装时无需访问 registry：
 
-自 0.2.0 起，打包**其他插件**时也会把其生产依赖闭包一并打入 tarball：打包过程在暂存目录中安装插件的完整依赖树，通过 `bundleDependencies` 让 `npm pack` 携带 `node_modules`，离线机器安装时 pnpm 直接使用包内依赖、无需访问 registry（已验证 pnpm `--offline` 模式可安装）。打入的依赖清单记录在 `*.meta.json` 的 `bundledDependencies` 字段。`peerDependencies` 不打入，由 DSH 宿主在 profile 中满足。
+- 本插件自身通过 esbuild 将 `@deepseek-ai/schemastery`、`@deepseek-ai/dsh-tools` 等运行时依赖内联进单文件 `lib/index.js`，`.tgz` 不声明任何运行时依赖。
+- 打包其他插件时，会在暂存目录中安装其完整生产依赖树，通过 `bundleDependencies` 让 `npm pack` 把 `node_modules` 一并携带进 tarball，离线机器上 pnpm 直接使用包内依赖。
+- `peerDependencies` 不打入，由 DSH 宿主在 profile 中满足。
 
 ## 注意事项
 
