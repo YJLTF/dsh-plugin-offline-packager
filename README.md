@@ -2,6 +2,8 @@
 
 DeepSeek Harness 离线打包插件 — 在联网环境下将 DSH 插件打包为离线安装包（`.tgz`），传输到离线 DSH 环境中加载安装。
 
+本项目可为 [dsh-admin](https://github.com/YJLTF/dsh-admin) 的插件市场和插件管理提供离线插件包：打包生成的自包含 `.tgz` 安装时无需访问 registry，可上传到 dsh-admin 的插件市场，通过其插件管理功能在离线环境中分发与安装 DSH 插件。
+
 ## 工作原理
 
 本插件注册了一个名为 `offline-pack` 的 Tool，在 DSH Web UI 中通过 AI 对话调用。它支持三种来源：
