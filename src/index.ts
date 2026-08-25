@@ -30,7 +30,7 @@ export function apply(ctx: Context, config: Config) {
       },
       includeDeps: {
         type: 'boolean',
-        description: '是否包含 npm 依赖（默认 true，仅对本地路径有效）',
+        description: '是否在打包前为本地路径安装依赖以完成构建（默认 true；注意产物 tarball 本身不携带 node_modules）',
       },
     },
     output: {

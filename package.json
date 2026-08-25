@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-offline-packager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
@@ -9,16 +9,15 @@
     "cordis.patch.yml"
   ],
   "scripts": {
-    "build": "tsc",
-    "prepublishOnly": "tsc",
-    "prepare": "tsc"
-  },
-  "dependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "build": "node build.mjs && tsc",
+    "prepublishOnly": "npm run build",
+    "prepare": "npm run build"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "esbuild": "^0.25.0",
     "typescript": "^5.7.0",
     "@types/node": "^22.0.0"
   },
