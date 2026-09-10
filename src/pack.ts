@@ -61,7 +61,7 @@ export async function packPlugin(
       packagedAt: new Date().toISOString(),
       originalSource: source,
       harnessVersion: getHarnessVersion(),
-      packagerVersion: '0.2.0',
+      packagerVersion: '0.2.1',
       bundledDependencies: bundled,
     }
     const metaPath = join(outDir, basename(tarballPath, '.tgz') + '.meta.json')

@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-offline-packager",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",

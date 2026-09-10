@@ -65,6 +65,11 @@ AI 会自动调用 `offline-pack` 工具，输出类似：
 
 在离线环境的 DSH 中执行以下命令安装:
   dsh plugin --profile web add "deepseek-ai-dsh-base-0.1.1-rc.2.tgz"
+
+离线安装注意（pnpm ≥ 11）:
+pnpm 11 起 minimumReleaseAge 供应链策略默认开启（1440 分钟），pnpm add 会为 profile
+中已装的依赖树联网拉取发布时间元数据，离线环境因此报 "Failed to fetch metadata
+from .../ error sending request for url"。（完整解决方案见下文）
 ```
 
 ### 方式二：直接调用工具
@@ -115,6 +120,38 @@ dsh plugin --profile web add ./deepseek-ai-dsh-base-0.1.1-rc.2.tgz
 
 DSH 会解析 tarball 中的 `dsh.bundle` 声明，自动注册插件层并追加到 profile 的 `bundles` 列表。
 
+### pnpm ≥ 11 的 minimumReleaseAge 会导致离线安装失败（重要）
+
+`dsh plugin add` 的实现是把参数原样转发成 profile 目录里的 `pnpm add <tgz>`。pnpm 11 起 `minimumReleaseAge` 供应链策略默认开启（1440 分钟，拒绝安装发布不满 24 小时的版本），pnpm 12 还会默认对 lockfile 做一轮 supply-chain 校验。执行 `pnpm add` 时，pnpm 不仅解析新包，还会为 profile 中**已装好的整个依赖树**重新解析，并联网逐个拉取发布时间元数据。离线环境因此报错：
+
+```
+ERR_PNPM_RESOLVING_NPM_RESOLVER_NETWORK_ERROR: Failed to fetch metadata from
+https://registry.npmjs.org/@deepseek-ai%2Fschemastery: error sending request
+for url (https://registry.npmjs.org/@deepseek-ai%2Fschemastery)
+```
+
+注意：报错中的包名是 **DSH 宿主框架依赖树里的传递依赖**（如 dsh-base 依赖的 `@deepseek-ai/schemastery`），每次失败点还可能不同，与离线包本身是否自包含无关——即使 tarball 已通过 `bundleDependencies` 携带了全部依赖，也会在既有依赖树的元数据校验上失败。
+
+**解决**：编辑 profile 目录下的 `pnpm-workspace.yaml`（如 `C:\Users\<user>\.dsh\profiles\web\pnpm-workspace.yaml`，dsh 首次初始化时生成、之后不会覆盖），关闭该策略：
+
+```yaml
+packages:
+  - .
+
+nodeLinker: hoisted
+autoInstallPeers: false
+minimumReleaseAge: 0            # 关键：关闭 24h 供应链延迟，离线 add 不再需要元数据
+dangerouslyAllowAllBuilds: true # 若改后报 ERR_PNPM_IGNORED_BUILDS（exit 1）则加上
+```
+
+保存后重新执行安装即可（之前失败残留的 package.json 条目无需手动清理，重跑 add 会自愈）。也可不改文件，在安装命令末尾追加参数——`dsh` 会把多余参数原样透传给 pnpm：
+
+```bash
+dsh plugin --profile web add ./dsh-thinktune-ollama-0.1.0.tgz --config.minimum-release-age=0
+```
+
+> **注意**：`trustLockfile` 的命名是反直觉的——`true` 才是"信任 lockfile、跳过校验"。设置 `minimumReleaseAge: 0` 后供应链校验不再需要联网，无需再动它。`--prefer-offline` / `--offline` 对此问题无效，不要浪费时间尝试。
+
 > **Windows 注意**：`.tgz` 文件所在的完整路径（含各级目录）不能包含空格，否则 `dsh plugin --profile web add` 会报 `ENOENT`，详见下方[注意事项](#注意事项)。
 
 ### 验证安装
@@ -159,6 +196,7 @@ dsh --profile web --dump-config
 - 打包本地路径时，会自动尝试安装依赖和构建，但不保证所有项目都能成功
 - **含原生二进制依赖的插件需在与目标离线机相同的平台（OS/arch）上打包**：离线包携带的是打包机上安装到的依赖版本，平台相关的 `optionalDependencies`（如原生模块）跨平台不可用
 - **插件的 `peerDependencies` 不会打入离线包**：它们由 DSH 宿主在 profile 中提供（如 cordis），目标机器需已具备对应的 DSH 基础框架
+- **pnpm ≥ 11 的机器需先关闭 `minimumReleaseAge` 供应链策略再离线安装**：默认开启的该策略会使 `pnpm add` 为 profile 既有依赖树联网拉取元数据而失败，报 `Failed to fetch metadata from ...`，与离线包内容无关，详见[上文解决方案](#pnpm--11-的-minimumreleaseage-会导致离线安装失败重要)
 - **Windows 下 `.tgz` 的存放路径不能包含空格**：`dsh plugin --profile web add` 在 Windows 上以 shell 模式把参数转发给 pnpm，且不会为参数补引号，路径会在空格处被截断。例如在 `D:\DSH Desktop\offline-packages` 下执行 `dsh plugin --profile web add ./xxx.tgz`，pnpm 实际会去 `<profile 目录>\Desktop\offline-packages\xxx.tgz` 找文件，报 `ENOENT: no such file or directory`。此问题与 tar 包格式无关，手动加引号也无效（引号在传参给 dsh 时已被 shell 消费）。解决办法是先把 `.tgz` 移到不含空格的目录再安装：
 
   ```powershell

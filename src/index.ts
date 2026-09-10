@@ -44,7 +44,17 @@ export function apply(ctx: Context, config: Config) {
         args.output ? String(args.output) : undefined,
         args.includeDeps !== false,
       )
-      return `离线包已生成: ${result}\n\n在离线环境的 DSH 中执行以下命令安装:\n  dsh plugin --profile web add "${result}"`
+      return `离线包已生成: ${result}
+
+在离线环境的 DSH 中执行以下命令安装:
+  dsh plugin --profile web add "${result}"
+
+离线安装注意（pnpm ≥ 11）:
+pnpm 11 起 minimumReleaseAge 供应链策略默认开启（1440 分钟），pnpm add 会为 profile 中已装的依赖树联网拉取发布时间元数据，离线环境因此报 "Failed to fetch metadata from .../ error sending request for url"。报错的包名是 DSH 宿主框架的传递依赖（每次可能不同），与本离线包是否自包含无关。解决：在 profile 目录（如 ~/.dsh/profiles/web）的 pnpm-workspace.yaml 中加入:
+  minimumReleaseAge: 0
+若改后报 ERR_PNPM_IGNORED_BUILDS，再加入:
+  dangerouslyAllowAllBuilds: true
+也可不改文件，在安装命令末尾追加 --config.minimum-release-age=0（dsh 会原样透传给 pnpm）`
     },
   }))
 }
