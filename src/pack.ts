@@ -1,7 +1,10 @@
 import { execSync, type ExecSyncOptions } from 'child_process'
+import { createRequire } from 'module'
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { resolve, join, basename } from 'path'
 import { randomUUID } from 'crypto'
+
+const require = createRequire(import.meta.url)
 
 const execOptions: ExecSyncOptions = {
   encoding: 'utf-8',
@@ -42,7 +45,7 @@ export async function packPlugin(
     mkdirSync(stage, { recursive: true })
 
     // 1. 将插件源码放入暂存目录（构建在暂存目录内完成，不触碰原目录）
-    await prepareStage(source, stage, tmpDir)
+    prepareStage(source, stage, tmpDir)
 
     // 2. 安装生产依赖并写入 bundleDependencies
     let bundled: string[] = []
@@ -61,7 +64,7 @@ export async function packPlugin(
       packagedAt: new Date().toISOString(),
       originalSource: source,
       harnessVersion: getHarnessVersion(),
-      packagerVersion: '0.2.1',
+      packagerVersion: getPackagerVersion(),
       bundledDependencies: bundled,
     }
     const metaPath = join(outDir, basename(tarballPath, '.tgz') + '.meta.json')
@@ -110,25 +113,31 @@ function detectSourceType(source: string): SourceType {
   return 'npm'
 }
 
+/** 执行 npm pack 并从输出中解析出生成的 .tgz 文件名。 */
+function packTgz(args: string, packDestination: string, cwd?: string): string {
+  const result = String(execSync(`npm pack ${args} --pack-destination "${packDestination}"`, {
+    ...execOptions,
+    cwd,
+  }))
+  const filename = result.trim().split('\n').pop()?.trim() ?? ''
+  if (!filename || !filename.endsWith('.tgz')) {
+    throw new Error(`npm pack 失败: 未获取到文件名，输出: ${result}`)
+  }
+  return filename
+}
+
 /**
  * 将插件源码放入暂存目录：
  * - npm：npm pack 下载已发布 tarball 后解压
- * - GitHub：克隆后安装依赖并构建
+ * - GitHub：克隆（支持 #branch 指定分支）后安装依赖并构建
  * - 本地：复制源码（排除 node_modules / .git）后按需构建
  */
-async function prepareStage(source: string, stage: string, tmpDir: string) {
+function prepareStage(source: string, stage: string, tmpDir: string) {
   switch (detectSourceType(source)) {
     case 'npm': {
-      const result = String(execSync(
-        `npm pack ${source} --pack-destination "${tmpDir}"`,
-        execOptions,
-      ))
-      const filename = result.trim().split('\n').pop()?.trim() ?? ''
-      if (!filename || !filename.endsWith('.tgz')) {
-        throw new Error(`npm pack 失败: 未获取到文件名，输出: ${result}`)
-      }
       // 使用相对路径调用 tar：Windows 上 GNU tar 会把 "F:\..." 的冒号
       // 解析为远程主机，bsdtar 则兼容两者，相对路径对两种实现都安全
+      const filename = packTgz(`"${source}"`, tmpDir)
       execSync(`tar -xzf "${filename}" -C stage --strip-components=1`, {
         ...execOptions,
         cwd: tmpDir,
@@ -136,10 +145,17 @@ async function prepareStage(source: string, stage: string, tmpDir: string) {
       return
     }
     case 'github': {
-      const repoUrl = source.startsWith('github:')
-        ? `https://github.com/${source.slice(7)}`
-        : source
-      execSync(`git clone --depth 1 ${repoUrl} "${stage}"`, execOptions)
+      const repoSpec = source.startsWith('github:')
+        ? source.slice(7)
+        : source.replace(/^https?:\/\/github\.com\//, '')
+      // npm 风格的 #branch / #tag 后缀转换为 clone 分支参数
+      const hashIndex = repoSpec.indexOf('#')
+      const branch = hashIndex >= 0 ? repoSpec.slice(hashIndex + 1) : undefined
+      const repoUrl = `https://github.com/${hashIndex >= 0 ? repoSpec.slice(0, hashIndex) : repoSpec}`
+      execSync(
+        `git clone --depth 1 ${branch ? `--branch "${branch}" ` : ''}"${repoUrl}" "${stage}"`,
+        execOptions,
+      )
       if (!existsSync(join(stage, 'package.json'))) {
         throw new Error(`GitHub 仓库 ${repoUrl} 中未找到 package.json`)
       }
@@ -173,15 +189,10 @@ async function prepareStage(source: string, stage: string, tmpDir: string) {
  * 随后修剪掉开发依赖，只保留生产依赖闭包。
  */
 function buildInStage(stage: string) {
+  // npm install 生命周期会自动执行根包的 prepare，无需再显式跑一遍
   execSync('npm install --no-audit --no-fund', { ...execOptions, cwd: stage })
   const pkg = readPackageJson(stage)
-  if (pkg.scripts?.prepare) {
-    try {
-      execSync('npm run prepare', { ...execOptions, cwd: stage })
-    } catch {
-      // prepare 可能失败，继续尝试 build
-    }
-  }
+  // prepare 未涵盖构建（或项目只有 build 脚本）时补一次构建
   if (pkg.scripts?.build) {
     execSync('npm run build', { ...execOptions, cwd: stage })
   }
@@ -201,7 +212,8 @@ function writePackageJson(dir: string, pkg: Record<string, any>) {
  *
  * - 暂存目录里已有 node_modules（本地/GitHub 构建后）则先 prune 到仅生产依赖；
  *  npm 来源的已发布 tarball 尚无 node_modules，直接安装生产依赖。
- * - peerDependencies 不打入：DSH 宿主（如 cordis）会在 profile 中满足它们，
+ * - 安装以 --legacy-peer-deps 进行，peerDependencies 不进入依赖树、
+ *  不打入离线包：DSH 宿主（如 cordis）会在 profile 中满足它们，
  *  打入反而会使插件持有独立实例导致与宿主类型不兼容。
  * - 安装前临时摘掉根包的 scripts，避免根包自身的 prepare 在缺少开发依赖的
  *  暂存目录里被 npm install 触发执行而失败。
@@ -217,11 +229,14 @@ function bundleDeps(stage: string): string[] {
 
   const nmDir = join(stage, 'node_modules')
   if (existsSync(nmDir)) {
+    // 临时摘除 peerDependencies：构建阶段的 npm install 会自动安装 peer，
+    // 摘除后 prune 会把 peer 及其传递依赖视为多余包一并清除，避免孤儿依赖混入离线包
+    writePackageJson(stage, { ...pkg, peerDependencies: undefined })
     execSync('npm prune --omit=dev --no-audit --no-fund', { ...execOptions, cwd: stage })
   } else {
     // JSON.stringify 会丢弃值为 undefined 的键，此处临时隐藏 scripts
     writePackageJson(stage, { ...pkg, scripts: undefined })
-    execSync('npm install --omit=dev --no-audit --no-fund', { ...execOptions, cwd: stage })
+    execSync('npm install --omit=dev --legacy-peer-deps --no-audit --no-fund', { ...execOptions, cwd: stage })
   }
 
   const peers = new Set(Object.keys(pkg.peerDependencies ?? {}))
@@ -264,15 +279,7 @@ function pruneNodeModules(stage: string): void {
 }
 
 function packStage(stage: string, outDir: string, outputName: string | undefined): string {
-  const result = String(execSync(
-    `npm pack --ignore-scripts --pack-destination "${outDir}"`,
-    { ...execOptions, cwd: stage },
-  ))
-  const filename = result.trim().split('\n').pop()?.trim() ?? ''
-  if (!filename) {
-    throw new Error('npm pack 失败')
-  }
-
+  const filename = packTgz('--ignore-scripts', outDir, stage)
   const tarballPath = join(outDir, filename)
 
   if (outputName) {
@@ -287,8 +294,8 @@ function packStage(stage: string, outDir: string, outputName: string | undefined
 
 function normalizeSourceName(source: string): string {
   if (source.startsWith('github:') || source.includes('github.com')) {
-    // 提取 repo 名
-    const match = source.match(/(?:github\.com\/|github:)([\w.-]+)\/([\w.-]+)/)
+    // 提取 repo 名（去掉 .git 后缀）
+    const match = source.match(/(?:github\.com\/|github:)([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:#.*)?$/)
     return match ? `${match[1]}/${match[2]}` : source
   }
   return source
@@ -303,10 +310,31 @@ function getHarnessVersion(): string {
   }
 }
 
-function cleanup(dir: string) {
+/** 从本包的 package.json 读取版本号，避免与 package.json 重复维护。 */
+function getPackagerVersion(): string {
   try {
-    rmSync(dir, { recursive: true, force: true })
+    return require('../package.json').version as string
   } catch {
-    // 忽略清理错误
+    return 'unknown'
   }
+}
+
+function cleanup(dir: string) {
+  // Windows 上杀毒软件等可能短暂锁定目录，重试几次再放弃
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      rmSync(dir, { recursive: true, force: true })
+      return
+    } catch {
+      if (attempt === 2) {
+        process.stderr.write(`offline-packager: 清理暂存目录失败，请手动删除 ${dir}\n`)
+      } else {
+        sleepSync(250)
+      }
+    }
+  }
+}
+
+function sleepSync(ms: number) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }

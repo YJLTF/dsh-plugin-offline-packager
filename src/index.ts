@@ -22,7 +22,7 @@ export function apply(ctx: Context, config: Config) {
       source: {
         type: 'string',
         required: true,
-        description: '插件来源：npm 包名（如 @deepseek-ai/dsh-base）、GitHub URL（如 github:user/repo）或本地路径',
+        description: '插件来源：npm 包名（如 @deepseek-ai/dsh-base）、GitHub URL（如 github:user/repo，可用 #branch 指定分支）或本地路径',
       },
       output: {
         type: 'string',
@@ -37,11 +37,11 @@ export function apply(ctx: Context, config: Config) {
       schema: { type: 'string' },
       render: (_args, value) => [{ type: 'text', text: value }],
     },
-    async execute(args: Record<string, any>) {
+    async execute(args) {
       const result = await packPlugin(
-        String(args.source),
+        args.source,
         config.outputDir,
-        args.output ? String(args.output) : undefined,
+        args.output,
         args.includeDeps !== false,
       )
       return `离线包已生成: ${result}
@@ -52,7 +52,7 @@ export function apply(ctx: Context, config: Config) {
 离线安装注意（pnpm ≥ 11）:
 pnpm 11 起 minimumReleaseAge 供应链策略默认开启（1440 分钟），pnpm add 会为 profile 中已装的依赖树联网拉取发布时间元数据，离线环境因此报 "Failed to fetch metadata from .../ error sending request for url"。报错的包名是 DSH 宿主框架的传递依赖（每次可能不同），与本离线包是否自包含无关。解决：在 profile 目录（如 ~/.dsh/profiles/web）的 pnpm-workspace.yaml 中加入:
   minimumReleaseAge: 0
-若改后报 ERR_PNPM_IGNORED_BUILDS，再加入:
+若改后报 ERR_PNPM_IGNORED_BUILDS，按 pnpm 报错提示在 pnpm-workspace.yaml 的 allowBuilds 映射中加入对应包名，或加入:
   dangerouslyAllowAllBuilds: true
 也可不改文件，在安装命令末尾追加 --config.minimum-release-age=0（dsh 会原样透传给 pnpm）`
     },
