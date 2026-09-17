@@ -9,7 +9,8 @@ const require = createRequire(import.meta.url)
 const execOptions: ExecSyncOptions = {
   encoding: 'utf-8',
   stdio: 'pipe',
-  timeout: 300_000,
+  // 重依赖插件（如渲染类插件带 vite / puppeteer）的安装可能远超 5 分钟
+  timeout: 900_000,
 }
 
 /**
@@ -170,8 +171,12 @@ function prepareStage(source: string, stage: string, tmpDir: string) {
       cpSync(absPath, stage, {
         recursive: true,
         filter: (src) => {
+          // 按路径段匹配，任意深度的 node_modules / .git 都排除——
+          // monorepo 插件（pnpm workspace）的子包里有自己的 node_modules，
+          // 其中往往包含指向工作区的符号链接，复制会失败或污染产物
           const rel = src.slice(absPath.length).replace(/^[\\/]/, '')
-          return rel !== 'node_modules' && !rel.startsWith('node_modules/') && !rel.startsWith('node_modules\\') && rel !== '.git' && !rel.startsWith('.git/')
+          const segments = rel.split(/[\\/]/)
+          return !segments.includes('node_modules') && !segments.includes('.git')
         },
       })
       // 有构建脚本产物缺失时先构建（例如存在 tsconfig.json 但没有 lib/）
