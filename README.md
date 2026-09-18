@@ -18,7 +18,7 @@ DeepSeek Harness（DSH）离线打包插件 — 在**联网环境**中把任意 
 - **离线元数据**：每次打包生成同名 `.meta.json`（包名、来源、打包时间、DSH 版本、打包器版本、捆绑依赖清单），便于离线环境审计与管理。
 - **内建离线安装指引**：打包结果会附带针对 pnpm ≥ 11 供应链策略（`minimumReleaseAge`）的离线安装注意事项与解决命令，AI 可直接转述给用户。
 - **自身零依赖**：本插件经 esbuild 打成单文件 `lib/index.js`，自身 `.tgz` 也不声明任何运行时依赖，同样可以离线安装。
-- **兼容 dsh 0.1.5-alpha.2**：基于 `@deepseek-ai/dsh-tools@0.1.5-alpha.2`、`@deepseek-ai/cordis@^4.0.2` 构建与类型校验。
+- **兼容 dsh 0.1.6-alpha.2**：基于 `@deepseek-ai/dsh-tools@0.1.6-alpha.2`、`@deepseek-ai/cordis@^4.0.2` 构建与类型校验。
 
 ## 工作原理
 
@@ -31,7 +31,7 @@ DeepSeek Harness（DSH）离线打包插件 — 在**联网环境**中把任意 
 
 ### 前提条件
 
-- 已安装 [DeepSeek Harness (DSH)](https://deepseek-harness.github.io/deepseek-harness/)（已在 0.1.5-alpha.1 / 0.1.5-alpha.2 上验证）
+- 已安装 [DeepSeek Harness (DSH)](https://deepseek-harness.github.io/deepseek-harness/)（已在 0.1.5-alpha.1 / 0.1.5-alpha.2 / 0.1.6-alpha.2 上验证）
 - Node.js >= 22，npm，以及系统里有 pnpm（`dsh plugin` 依赖它转发）
 - 从 GitHub 来源打包时需要 `git`
 
