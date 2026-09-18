@@ -6,11 +6,22 @@ import { randomUUID } from 'crypto'
 
 const require = createRequire(import.meta.url)
 
+// 子进程环境剥离 npm_config_*：npm run / npx 会把当前解析出的 npm 配置
+// （含用户 .npmrc 全部条目）以环境变量注入子进程，嵌套的 npm install 会
+// 原样继承。npm 12 起 allow-scripts 等项在环境变量形态下按 CLI 标志语义
+// 校验，项目级安装直接报 EALLOWSCRIPTS；剥离后嵌套调用与用户在干净 shell
+// 中执行一致，配置仍从各层 .npmrc 读取。
+const childEnv: NodeJS.ProcessEnv = { ...process.env }
+for (const key of Object.keys(childEnv)) {
+  if (/^npm_config_/i.test(key)) delete childEnv[key]
+}
+
 const execOptions: ExecSyncOptions = {
   encoding: 'utf-8',
   stdio: 'pipe',
   // 重依赖插件（如渲染类插件带 vite / puppeteer）的安装可能远超 5 分钟
   timeout: 900_000,
+  env: childEnv,
 }
 
 /**
